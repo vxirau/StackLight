@@ -1,5 +1,7 @@
 # StackLight
 
+![StackLight logo](logo.png)
+
 StackLight is a local macOS menu bar monitor for agent/context tools.
 
 It ships with built-in monitors for:
