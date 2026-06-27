@@ -39,6 +39,9 @@ Dashboard controls are intentionally scoped to dashboards: the toggle starts or
 stops the configured dashboard listener and should not be used to shut down the
 underlying service itself.
 
+The monitor list also has a `Stop all dashboards` action for closing every
+configured dashboard listener at once while leaving core services alone.
+
 The Settings tab lets users add custom monitors and choose which discovered
 metrics are visible in the main monitor cards.
 

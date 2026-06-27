@@ -95,16 +95,7 @@ final class StackMonitor: ObservableObject {
     }
 
     func stopDashboard(_ snapshot: ToolSnapshot) async {
-        let ports = snapshot.tool.stopPorts.map(String.init).joined(separator: " ")
-        guard !ports.isEmpty else { return }
-        let command = """
-        for port in \(ports); do
-          for pid in $(lsof -tiTCP:$port -sTCP:LISTEN 2>/dev/null); do
-            kill "$pid" 2>/dev/null || true
-          done
-        done
-        """
-        _ = await ShellRunner.run(command, timeout: 3)
+        await stopDashboardPorts(snapshot.tool.stopPorts)
         try? await Task.sleep(for: .seconds(1))
         await refresh()
     }
@@ -119,6 +110,14 @@ final class StackMonitor: ObservableObject {
         }
     }
 
+    func stopAllDashboards() async {
+        let ports = snapshots.flatMap { $0.tool.stopPorts }
+        guard !ports.isEmpty else { return }
+        await stopDashboardPorts(ports)
+        try? await Task.sleep(for: .seconds(1))
+        await refresh()
+    }
+
     func openDashboard(_ snapshot: ToolSnapshot) {
         if snapshot.tool.kind == .graphify {
             openGraphifyStaticDashboard()
@@ -126,6 +125,19 @@ final class StackMonitor: ObservableObject {
         }
         guard let url = snapshot.tool.dashboard else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    private func stopDashboardPorts(_ ports: [Int]) async {
+        let joined = Set(ports).sorted().map(String.init).joined(separator: " ")
+        guard !joined.isEmpty else { return }
+        let command = """
+        for port in \(joined); do
+          for pid in $(lsof -tiTCP:$port -sTCP:LISTEN 2>/dev/null); do
+            kill "$pid" 2>/dev/null || true
+          done
+        done
+        """
+        _ = await ShellRunner.run(command, timeout: 4)
     }
 
     func chooseGraphifyProject() {

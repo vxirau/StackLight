@@ -152,6 +152,21 @@ private struct MonitorView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 8) {
+                HStack {
+                    Text("Dashboards")
+                        .font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                    Button(role: .destructive) {
+                        Task { await monitor.stopAllDashboards() }
+                    } label: {
+                        Label("Stop all dashboards", systemImage: "stop.circle")
+                    }
+                    .controlSize(.small)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+
                 ForEach(monitor.snapshots) { snapshot in
                     ToolRow(snapshot: snapshot)
                 }
