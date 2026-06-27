@@ -249,28 +249,38 @@ final class StackMonitor: ObservableObject {
 
     private static func snapshot(for tool: ToolDefinition, graphifyProject: URL?) async -> ToolSnapshot {
         var snapshot = ToolSnapshot(tool: tool)
+        let dashboardPids = await pidsForPorts(tool.stopPorts)
+        snapshot.dashboardRunning = !dashboardPids.isEmpty
 
         if tool.kind == .installPresence {
             let result = await ShellRunner.run(tool.presenceCommand, timeout: 3)
             snapshot.isAvailable = result.exitCode == 0 && !result.output.isEmpty
-            snapshot.detail = snapshot.isAvailable ? result.output : "Not found"
+            snapshot.detail = serviceDetail(
+                tool: tool,
+                isAvailable: snapshot.isAvailable,
+                dashboardRunning: snapshot.dashboardRunning,
+                presenceText: snapshot.isAvailable ? result.output : nil
+            )
             return snapshot
         }
 
         let pids = await pidsForPorts(tool.ports)
-        let dashboardPids = await pidsForPorts(tool.stopPorts)
-        snapshot.isAvailable = !pids.isEmpty
-        snapshot.dashboardRunning = !dashboardPids.isEmpty
-        snapshot.usage = await usageForPids(pids)
-        snapshot.detail = serviceDetail(tool: tool, isAvailable: snapshot.isAvailable, dashboardRunning: snapshot.dashboardRunning)
-
+        var presenceText: String?
         if !tool.presenceCommand.isEmpty && pids.isEmpty {
             let result = await ShellRunner.run(tool.presenceCommand, timeout: 3)
             if result.exitCode == 0 && !result.output.isEmpty {
-                snapshot.isAvailable = true
-                snapshot.detail = result.output
+                presenceText = result.output
             }
         }
+
+        snapshot.isAvailable = !pids.isEmpty || presenceText != nil
+        snapshot.usage = await usageForPids(pids.isEmpty ? dashboardPids : pids)
+        snapshot.detail = serviceDetail(
+            tool: tool,
+            isAvailable: snapshot.isAvailable,
+            dashboardRunning: snapshot.dashboardRunning,
+            presenceText: presenceText
+        )
 
         switch tool.kind {
         case .agentmemory:
@@ -289,8 +299,21 @@ final class StackMonitor: ObservableObject {
                 }
                 snapshot.isAvailable = snapshot.isAvailable || FileManager.default.fileExists(atPath: dashboard.path)
                 snapshot.dashboardRunning = snapshot.dashboardRunning || !dashboardPids.isEmpty
+                if snapshot.isAvailable {
+                    snapshot.detail = serviceDetail(
+                        tool: tool,
+                        isAvailable: true,
+                        dashboardRunning: snapshot.dashboardRunning,
+                        presenceText: presenceText ?? "Static graph available"
+                    )
+                }
             } else {
-                snapshot.detail = "Choose a project to open graphify-out/graph.html"
+                snapshot.detail = serviceDetail(
+                    tool: tool,
+                    isAvailable: snapshot.isAvailable,
+                    dashboardRunning: snapshot.dashboardRunning,
+                    presenceText: presenceText ?? "Choose a project to open graphify-out/graph.html"
+                )
             }
         case .generic, .installPresence:
             if !tool.metricsCommand.isEmpty {
@@ -301,14 +324,22 @@ final class StackMonitor: ObservableObject {
         return snapshot
     }
 
-    private static func serviceDetail(tool: ToolDefinition, isAvailable: Bool, dashboardRunning: Bool) -> String {
+    private static func serviceDetail(tool: ToolDefinition, isAvailable: Bool, dashboardRunning: Bool, presenceText: String? = nil) -> String {
+        let dashboard = dashboardRunning ? "dashboard running" : "dashboard stopped"
+        let presence = presenceText?
+            .split(whereSeparator: \.isNewline)
+            .first
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+
         if tool.ports.isEmpty {
-            return isAvailable ? "Available" : "Not available"
+            if isAvailable {
+                return [presence?.isEmpty == false ? presence! : "Installed", dashboard].joined(separator: "; ")
+            }
+            return "Not installed; \(dashboard)"
         }
 
         let monitored = tool.ports.map(String.init).joined(separator: ", ")
         if tool.canStart || tool.canStop {
-            let dashboard = dashboardRunning ? "dashboard running" : "dashboard stopped"
             return "\(isAvailable ? "Service available" : "Service not detected") on \(monitored); \(dashboard)"
         }
         return isAvailable ? "Listening on \(monitored)" : "No listener on \(monitored)"

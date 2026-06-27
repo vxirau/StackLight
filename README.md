@@ -25,9 +25,9 @@ are stored locally at:
 Each tool can define:
 
 - dashboard URL
-- local listener ports
+- service listener ports
 - dashboard start command
-- dashboard stop ports
+- dashboard listener ports
 - optional metrics command
 - optional presence command
 - notes

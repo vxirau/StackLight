@@ -418,11 +418,11 @@ private struct SettingsView: View {
                     TextField("http://127.0.0.1:9000", text: $monitor.draft.dashboardURL)
                 }
                 GridRow {
-                    Text("Ports")
+                    Text("Service ports")
                     TextField("9000, 9001", text: $monitor.draft.ports)
                 }
                 GridRow {
-                    Text("Stop ports")
+                    Text("Dashboard ports")
                     TextField("9000", text: $monitor.draft.stopPorts)
                 }
                 GridRow {

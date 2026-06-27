@@ -12,7 +12,7 @@ Fields:
 - `name`: display name.
 - `subtitle`: short description.
 - `dashboardURL`: local URL to open.
-- `ports`: local listener ports that indicate availability.
+- `ports`: service listener ports that indicate core service availability. Do not put dashboard-only ports here.
 - `startCommand`: shell command used to start the dashboard.
 - `stopPorts`: dashboard listener ports to kill when stopping the dashboard. Do not include core service ports unless the dashboard and service are the same process.
 - `metricsCommand`: shell command whose first lines are shown as metrics.
