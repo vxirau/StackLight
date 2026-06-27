@@ -7,6 +7,7 @@ final class StackMonitor: ObservableObject {
     @Published var snapshots: [ToolSnapshot] = []
     @Published var lastUpdated: Date?
     @Published var isRefreshing = false
+    @Published var hiddenMetricKeys: Set<String> = []
     @Published var selectedGraphifyProject: URL? {
         didSet {
             UserDefaults.standard.set(selectedGraphifyProject?.path, forKey: "selectedGraphifyProject")
@@ -16,6 +17,7 @@ final class StackMonitor: ObservableObject {
 
     private var refreshTask: Task<Void, Never>?
     private let storeURL: URL
+    private let hiddenMetricsKey = "hiddenMetricKeys"
 
     var overallSymbol: String {
         let available = snapshots.filter(\.isAvailable).count
@@ -41,6 +43,7 @@ final class StackMonitor: ObservableObject {
         if let path = UserDefaults.standard.string(forKey: "selectedGraphifyProject") {
             selectedGraphifyProject = URL(fileURLWithPath: path)
         }
+        hiddenMetricKeys = Set(UserDefaults.standard.stringArray(forKey: hiddenMetricsKey) ?? [])
 
         loadTools()
         snapshots = tools.map { ToolSnapshot(tool: $0) }
@@ -104,6 +107,16 @@ final class StackMonitor: ObservableObject {
         _ = await ShellRunner.run(command, timeout: 3)
         try? await Task.sleep(for: .seconds(1))
         await refresh()
+    }
+
+    func toggleDashboard(_ snapshot: ToolSnapshot) async {
+        if snapshot.dashboardRunning {
+            await stopDashboard(snapshot)
+        } else if snapshot.tool.kind == .graphify {
+            await startGraphifyServer()
+        } else {
+            await startDashboard(snapshot)
+        }
     }
 
     func openDashboard(_ snapshot: ToolSnapshot) {
@@ -178,6 +191,28 @@ final class StackMonitor: ObservableObject {
         NSWorkspace.shared.open(storeURL.deletingLastPathComponent())
     }
 
+    func isMetricVisible(tool: ToolDefinition, metric: ToolMetric) -> Bool {
+        !hiddenMetricKeys.contains(metricKey(tool: tool, metric: metric))
+    }
+
+    func setMetric(_ metric: ToolMetric, for tool: ToolDefinition, visible: Bool) {
+        let key = metricKey(tool: tool, metric: metric)
+        if visible {
+            hiddenMetricKeys.remove(key)
+        } else {
+            hiddenMetricKeys.insert(key)
+        }
+        UserDefaults.standard.set(Array(hiddenMetricKeys).sorted(), forKey: hiddenMetricsKey)
+    }
+
+    func visibleMetrics(for snapshot: ToolSnapshot) -> [ToolMetric] {
+        snapshot.metrics.filter { isMetricVisible(tool: snapshot.tool, metric: $0) }
+    }
+
+    private func metricKey(tool: ToolDefinition, metric: ToolMetric) -> String {
+        "\(tool.id)::\(metric.title)"
+    }
+
     private func loadTools() {
         let custom: [ToolDefinition]
         if let data = try? Data(contentsOf: storeURL),
@@ -211,9 +246,11 @@ final class StackMonitor: ObservableObject {
         }
 
         let pids = await pidsForPorts(tool.ports)
+        let dashboardPids = await pidsForPorts(tool.stopPorts)
         snapshot.isAvailable = !pids.isEmpty
+        snapshot.dashboardRunning = !dashboardPids.isEmpty
         snapshot.usage = await usageForPids(pids)
-        snapshot.detail = pids.isEmpty ? "No local dashboard listener" : "Listening on \(tool.ports.map(String.init).joined(separator: ", "))"
+        snapshot.detail = serviceDetail(tool: tool, isAvailable: snapshot.isAvailable, dashboardRunning: snapshot.dashboardRunning)
 
         if !tool.presenceCommand.isEmpty && pids.isEmpty {
             let result = await ShellRunner.run(tool.presenceCommand, timeout: 3)
@@ -239,6 +276,7 @@ final class StackMonitor: ObservableObject {
                     snapshot.detail = "No graphify-out graph found for selected project"
                 }
                 snapshot.isAvailable = snapshot.isAvailable || FileManager.default.fileExists(atPath: dashboard.path)
+                snapshot.dashboardRunning = snapshot.dashboardRunning || !dashboardPids.isEmpty
             } else {
                 snapshot.detail = "Choose a project to open graphify-out/graph.html"
             }
@@ -249,6 +287,19 @@ final class StackMonitor: ObservableObject {
         }
 
         return snapshot
+    }
+
+    private static func serviceDetail(tool: ToolDefinition, isAvailable: Bool, dashboardRunning: Bool) -> String {
+        if tool.ports.isEmpty {
+            return isAvailable ? "Available" : "Not available"
+        }
+
+        let monitored = tool.ports.map(String.init).joined(separator: ", ")
+        if tool.canStart || tool.canStop {
+            let dashboard = dashboardRunning ? "dashboard running" : "dashboard stopped"
+            return "\(isAvailable ? "Service available" : "Service not detected") on \(monitored); \(dashboard)"
+        }
+        return isAvailable ? "Listening on \(monitored)" : "No listener on \(monitored)"
     }
 
     private static func pidsForPorts(_ ports: [Int]) async -> [Int] {

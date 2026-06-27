@@ -164,40 +164,38 @@ private struct MonitorView: View {
 private struct ToolRow: View {
     @EnvironmentObject private var monitor: StackMonitor
     let snapshot: ToolSnapshot
-    @State private var isExpanded = false
 
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: 8) {
-                if snapshot.usage.memoryBytes > 0 || snapshot.usage.cpuPercent > 0 {
-                    HStack(spacing: 6) {
-                        MetricPill(symbol: "speedometer", title: "CPU", value: snapshot.usage.cpuLabel)
-                        MetricPill(symbol: "memorychip", title: "Memory", value: snapshot.usage.memoryLabel)
-                        if !snapshot.usage.pids.isEmpty {
-                            MetricPill(symbol: "number", title: "PID", value: pidSummary)
-                        }
+        VStack(alignment: .leading, spacing: 8) {
+            ToolHeader(snapshot: snapshot)
+
+            if snapshot.usage.memoryBytes > 0 || snapshot.usage.cpuPercent > 0 {
+                HStack(spacing: 6) {
+                    MetricPill(symbol: "speedometer", title: "CPU", value: snapshot.usage.cpuLabel)
+                    MetricPill(symbol: "memorychip", title: "Memory", value: snapshot.usage.memoryLabel)
+                    if !snapshot.usage.pids.isEmpty {
+                        MetricPill(symbol: "number", title: "PID", value: pidSummary)
                     }
                 }
-
-                if !snapshot.metrics.isEmpty {
-                    MetricBoard(metrics: snapshot.metrics)
-                }
-
-                if snapshot.tool.kind == .graphify {
-                    graphifyControls
-                } else {
-                    standardControls
-                }
-
-                if !snapshot.tool.notes.isEmpty {
-                    Label(snapshot.tool.notes, systemImage: "info.circle")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
             }
-            .padding(.top, 6)
-        } label: {
-            ToolHeader(snapshot: snapshot)
+
+            let visibleMetrics = monitor.visibleMetrics(for: snapshot)
+            if !visibleMetrics.isEmpty {
+                MetricBoard(metrics: visibleMetrics)
+            }
+
+            if snapshot.tool.kind == .graphify {
+                graphifyControls
+            } else {
+                standardControls
+            }
+
+            if !snapshot.tool.notes.isEmpty {
+                Label(snapshot.tool.notes, systemImage: "info.circle")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 9)
@@ -215,14 +213,6 @@ private struct ToolRow: View {
     private var standardControls: some View {
         HStack {
             Button {
-                Task { await monitor.startDashboard(snapshot) }
-            } label: {
-                Label("Start", systemImage: "play.fill")
-            }
-            .disabled(!snapshot.tool.canStart)
-            .controlSize(.small)
-
-            Button {
                 monitor.openDashboard(snapshot)
             } label: {
                 Label("Open", systemImage: "safari")
@@ -230,12 +220,15 @@ private struct ToolRow: View {
             .disabled(snapshot.tool.dashboard == nil)
             .controlSize(.small)
 
-            Button(role: .destructive) {
-                Task { await monitor.stopDashboard(snapshot) }
+            Button(role: snapshot.dashboardRunning ? .destructive : nil) {
+                Task { await monitor.toggleDashboard(snapshot) }
             } label: {
-                Label("Stop", systemImage: "stop.fill")
+                Label(
+                    snapshot.dashboardRunning ? "Stop dashboard" : "Start dashboard",
+                    systemImage: snapshot.dashboardRunning ? "stop.fill" : "play.fill"
+                )
             }
-            .disabled(!snapshot.tool.canStop || !snapshot.isAvailable)
+            .disabled(snapshot.dashboardRunning ? !snapshot.tool.canStop : !snapshot.tool.canStart)
             .controlSize(.small)
 
             Spacer()
@@ -253,34 +246,29 @@ private struct ToolRow: View {
 
             HStack {
                 Button {
+                    monitor.openGraphifyStaticDashboard()
+                } label: {
+                    Label("Open", systemImage: "safari")
+                }
+                .disabled(monitor.selectedGraphifyProject == nil)
+                .controlSize(.small)
+
+                Button(role: snapshot.dashboardRunning ? .destructive : nil) {
+                    Task { await monitor.toggleDashboard(snapshot) }
+                } label: {
+                    Label(
+                        snapshot.dashboardRunning ? "Stop server" : "Start server",
+                        systemImage: snapshot.dashboardRunning ? "stop.fill" : "play.fill"
+                    )
+                }
+                .disabled(monitor.selectedGraphifyProject == nil)
+                .controlSize(.small)
+
+                Button {
                     monitor.chooseGraphifyProject()
                 } label: {
                     Label("Choose", systemImage: "folder")
                 }
-                .controlSize(.small)
-
-                Button {
-                    monitor.openGraphifyStaticDashboard()
-                } label: {
-                    Label("Open static", systemImage: "safari")
-                }
-                .disabled(monitor.selectedGraphifyProject == nil)
-                .controlSize(.small)
-
-                Button {
-                    Task { await monitor.startGraphifyServer() }
-                } label: {
-                    Label("Start server", systemImage: "play.fill")
-                }
-                .disabled(monitor.selectedGraphifyProject == nil)
-                .controlSize(.small)
-
-                Button(role: .destructive) {
-                    Task { await monitor.stopDashboard(snapshot) }
-                } label: {
-                    Label("Stop server", systemImage: "stop.fill")
-                }
-                .disabled(snapshot.usage.pids.isEmpty)
                 .controlSize(.small)
 
                 Spacer()
@@ -296,6 +284,8 @@ private struct SettingsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 toolCatalog
+                Divider()
+                metricSettings
                 Divider()
                 addToolForm
             }
@@ -344,6 +334,52 @@ private struct SettingsView: View {
                 }
                 .padding(8)
                 .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
+    private var metricSettings: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Visible Metrics", systemImage: "gauge.with.dots.needle.50percent")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    Task { await monitor.refresh() }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .controlSize(.small)
+            }
+
+            let snapshotsWithMetrics = monitor.snapshots.filter { !$0.metrics.isEmpty }
+            if snapshotsWithMetrics.isEmpty {
+                Text("Metrics appear here after a tool reports status.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(snapshotsWithMetrics) { snapshot in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(snapshot.tool.name)
+                            .font(.system(size: 13, weight: .semibold))
+
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading, spacing: 6) {
+                            ForEach(snapshot.metrics) { metric in
+                                Toggle(isOn: Binding(
+                                    get: { monitor.isMetricVisible(tool: snapshot.tool, metric: metric) },
+                                    set: { monitor.setMetric(metric, for: snapshot.tool, visible: $0) }
+                                )) {
+                                    Label(metric.title, systemImage: metric.symbol)
+                                        .font(.caption)
+                                        .lineLimit(1)
+                                }
+                                .toggleStyle(.checkbox)
+                            }
+                        }
+                    }
+                    .padding(8)
+                    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                }
             }
         }
     }

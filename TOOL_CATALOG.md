@@ -14,7 +14,7 @@ Fields:
 - `dashboardURL`: local URL to open.
 - `ports`: local listener ports that indicate availability.
 - `startCommand`: shell command used to start the dashboard.
-- `stopPorts`: local listener ports to kill when stopping the dashboard.
+- `stopPorts`: dashboard listener ports to kill when stopping the dashboard. Do not include core service ports unless the dashboard and service are the same process.
 - `metricsCommand`: shell command whose first lines are shown as metrics.
 - `presenceCommand`: shell command used to report installed/available state when no ports exist.
 - `notes`: small operator note shown in the UI.

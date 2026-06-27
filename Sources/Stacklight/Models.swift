@@ -53,15 +53,17 @@ struct ProcessUsage: Equatable {
 }
 
 struct ToolMetric: Identifiable, Equatable {
-    var id = UUID()
     var title: String
     var value: String
     var symbol: String
+
+    var id: String { title }
 }
 
 struct ToolSnapshot: Identifiable, Equatable {
     let tool: ToolDefinition
     var isAvailable: Bool = false
+    var dashboardRunning: Bool = false
     var usage = ProcessUsage()
     var metrics: [ToolMetric] = []
     var detail: String = "Not checked yet"

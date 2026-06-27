@@ -35,6 +35,13 @@ Each tool can define:
 StackLight displays local availability, dashboard controls, PID, CPU usage,
 memory usage, and small status summaries when the tool exposes them.
 
+Dashboard controls are intentionally scoped to dashboards: the toggle starts or
+stops the configured dashboard listener and should not be used to shut down the
+underlying service itself.
+
+The Settings tab lets users add custom monitors and choose which discovered
+metrics are visible in the main monitor cards.
+
 ## Privacy
 
 StackLight is local-first. It does not send telemetry, upload metrics, or call a
