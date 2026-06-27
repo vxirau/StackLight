@@ -18,7 +18,7 @@ struct StacklightView: View {
                         Label("Settings", systemImage: "gearshape")
                     }
             }
-            .padding(.top, 6)
+            .padding(.top, 4)
             Divider()
             footer
         }
@@ -26,11 +26,11 @@ struct StacklightView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             StackMark(
                 availableCount: monitor.availableCount,
                 totalCount: monitor.totalCount,
-                size: 34,
+                size: 30,
                 showsStatusLights: true
             )
 
@@ -50,8 +50,10 @@ struct StacklightView: View {
                 Label("Refresh", systemImage: "arrow.clockwise")
             }
             .disabled(monitor.isRefreshing)
+            .controlSize(.small)
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
     }
 
     private var footer: some View {
@@ -63,8 +65,10 @@ struct StacklightView: View {
             Button("Quit") {
                 NSApp.terminate(nil)
             }
+            .controlSize(.small)
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 
     private var lastUpdatedText: String {
@@ -147,12 +151,12 @@ private struct MonitorView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 10) {
+            LazyVStack(spacing: 8) {
                 ForEach(monitor.snapshots) { snapshot in
                     ToolRow(snapshot: snapshot)
                 }
             }
-            .padding(12)
+            .padding(10)
         }
     }
 }
@@ -160,13 +164,13 @@ private struct MonitorView: View {
 private struct ToolRow: View {
     @EnvironmentObject private var monitor: StackMonitor
     let snapshot: ToolSnapshot
-    @State private var isExpanded = true
+    @State private var isExpanded = false
 
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 if snapshot.usage.memoryBytes > 0 || snapshot.usage.cpuPercent > 0 {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 6) {
                         MetricPill(symbol: "speedometer", title: "CPU", value: snapshot.usage.cpuLabel)
                         MetricPill(symbol: "memorychip", title: "Memory", value: snapshot.usage.memoryLabel)
                         if !snapshot.usage.pids.isEmpty {
@@ -191,11 +195,12 @@ private struct ToolRow: View {
                         .foregroundStyle(.tertiary)
                 }
             }
-            .padding(.top, 8)
+            .padding(.top, 6)
         } label: {
             ToolHeader(snapshot: snapshot)
         }
-        .padding(12)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
     }
 
@@ -215,6 +220,7 @@ private struct ToolRow: View {
                 Label("Start", systemImage: "play.fill")
             }
             .disabled(!snapshot.tool.canStart)
+            .controlSize(.small)
 
             Button {
                 monitor.openDashboard(snapshot)
@@ -222,6 +228,7 @@ private struct ToolRow: View {
                 Label("Open", systemImage: "safari")
             }
             .disabled(snapshot.tool.dashboard == nil)
+            .controlSize(.small)
 
             Button(role: .destructive) {
                 Task { await monitor.stopDashboard(snapshot) }
@@ -229,13 +236,14 @@ private struct ToolRow: View {
                 Label("Stop", systemImage: "stop.fill")
             }
             .disabled(!snapshot.tool.canStop || !snapshot.isAvailable)
+            .controlSize(.small)
 
             Spacer()
         }
     }
 
     private var graphifyControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             if let selected = monitor.selectedGraphifyProject {
                 Text(selected.path)
                     .font(.caption2.monospaced())
@@ -249,6 +257,7 @@ private struct ToolRow: View {
                 } label: {
                     Label("Choose", systemImage: "folder")
                 }
+                .controlSize(.small)
 
                 Button {
                     monitor.openGraphifyStaticDashboard()
@@ -256,6 +265,7 @@ private struct ToolRow: View {
                     Label("Open static", systemImage: "safari")
                 }
                 .disabled(monitor.selectedGraphifyProject == nil)
+                .controlSize(.small)
 
                 Button {
                     Task { await monitor.startGraphifyServer() }
@@ -263,6 +273,7 @@ private struct ToolRow: View {
                     Label("Start server", systemImage: "play.fill")
                 }
                 .disabled(monitor.selectedGraphifyProject == nil)
+                .controlSize(.small)
 
                 Button(role: .destructive) {
                     Task { await monitor.stopDashboard(snapshot) }
@@ -270,6 +281,7 @@ private struct ToolRow: View {
                     Label("Stop server", systemImage: "stop.fill")
                 }
                 .disabled(snapshot.usage.pids.isEmpty)
+                .controlSize(.small)
 
                 Spacer()
             }
@@ -422,16 +434,16 @@ private struct ToolHeader: View {
     let snapshot: ToolSnapshot
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 8) {
             Circle()
                 .fill(snapshot.isAvailable ? Color.green : Color.gray.opacity(0.6))
-                .frame(width: 10, height: 10)
+                .frame(width: 9, height: 9)
                 .padding(.top, 5)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text(snapshot.tool.name)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.primary)
                     Spacer()
                     Text(snapshot.isAvailable ? "Available" : "Stopped")
@@ -457,30 +469,35 @@ private struct MetricBoard: View {
     let metrics: [ToolMetric]
 
     private let columns = [
-        GridItem(.flexible(), spacing: 8),
-        GridItem(.flexible(), spacing: 8)
+        GridItem(.flexible(), spacing: 6),
+        GridItem(.flexible(), spacing: 6),
+        GridItem(.flexible(), spacing: 6)
     ]
 
     var body: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
             ForEach(metrics) { metric in
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Image(systemName: metric.symbol)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
-                        .frame(width: 16)
+                        .frame(width: 14)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 1) {
                         Text(metric.title)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
                         Text(metric.value)
                             .font(.caption)
-                            .lineLimit(2)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                             .textSelection(.enabled)
                     }
                     Spacer(minLength: 0)
                 }
-                .padding(8)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 6)
                 .background(Color(nsColor: .windowBackgroundColor).opacity(0.72), in: RoundedRectangle(cornerRadius: 7))
             }
         }
@@ -503,8 +520,8 @@ private struct MetricPill: View {
                 .fontWeight(.medium)
         }
         .font(.caption)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
         .background(.background.opacity(0.7), in: Capsule())
     }
 }
